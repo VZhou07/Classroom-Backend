@@ -4,31 +4,53 @@ import { departments, subjects } from '../src/db/schema/schema.js';
 import { db } from '../src/db/db.js';
 import { desc } from 'drizzle-orm';
 
+/** First non-empty string from Express query (avoids arrays/objects in ILIKE patterns). */
+function queryString(param: unknown): string | undefined {
+  if (typeof param === 'string' && param.length > 0) return param;
+  if (Array.isArray(param)) {
+    const first = param.find((x): x is string => typeof x === 'string' && x.length > 0);
+    return first;
+  }
+  return undefined;
+}
+
+/** Escape `\`, `%`, `_` for PostgreSQL LIKE/ILIKE (default escape `\`). */
+function escapePgLikePattern(raw: string): string {
+  return raw.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
+
+function ilikeContains(column: Parameters<typeof ilike>[0], raw: string): ReturnType<typeof ilike> {
+  const safe = `%${escapePgLikePattern(raw)}%`;
+  return ilike(column, safe);
+}
+
 const router = express.Router();
 // get all subjects with optional search filtering and pagination
 router.get('/', async (req, res) => {
   try {
     const { search, department, page = '1', limit = '10' } = req.query;
-    const currentPage = Math.max(1, +page);
-    const limitPerPage = Math.max(1, +limit);
+    const currentPage = Math.max(1, parseInt(String(page),10)||1);
+    const limitPerPage = Math.min(Math.max(1,parseInt(String(limit),10)||10),100);
     const offset = (currentPage - 1) * limitPerPage;
     const filterConditions: SQL[] = [];
-    if (typeof search === 'string' && search.length > 0) {
+    const searchTerm = queryString(search);
+    if (searchTerm !== undefined) {
       const clause = or(
-        ilike(subjects.name, `%${search}%`),
-        ilike(subjects.code, `%${search}%`),
-        ilike(subjects.description, `%${search}%`),
-        ilike(departments.name, `%${search}%`),
-        ilike(departments.code, `%${search}%`),
-        ilike(departments.description, `%${search}%`),
+        ilikeContains(subjects.name, searchTerm),
+        ilikeContains(subjects.code, searchTerm),
+        ilikeContains(subjects.description, searchTerm),
+        ilikeContains(departments.name, searchTerm),
+        ilikeContains(departments.code, searchTerm),
+        ilikeContains(departments.description, searchTerm),
       );
       if (clause) filterConditions.push(clause);
     }
-    if (department) {
+    const departmentTerm = queryString(department);
+    if (departmentTerm !== undefined) {
       const clause = or(
-        ilike(departments.name, `%${department}%`),
-        ilike(departments.code, `%${department}%`),
-        ilike(departments.description, `%${department}%`),
+        ilikeContains(departments.name, departmentTerm),
+        ilikeContains(departments.code, departmentTerm),
+        ilikeContains(departments.description, departmentTerm),
       );
       if (clause) filterConditions.push(clause);
     }

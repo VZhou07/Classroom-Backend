@@ -1,1 +1,1 @@
-GET http://localhost:8000/api/subjects?search=ECE&page=1&limit=1
+GET http://localhost:8000/api/subjects?
