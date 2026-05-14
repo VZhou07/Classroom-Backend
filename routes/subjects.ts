@@ -28,9 +28,6 @@ const router = express.Router();
 // get all subjects with optional search filtering and pagination
 router.get('/', async (req, res) => {
   try {
-    // #region agent log
-    fetch('http://127.0.0.1:7737/ingest/1ef87483-3b9d-44bb-b521-32d323043ded',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9f9886'},body:JSON.stringify({sessionId:'9f9886',runId:'pre-fix',hypothesisId:'H5',location:'routes/subjects.ts:32',message:'Entered subjects route handler',data:{path:req.path,originalUrl:req.originalUrl,query:req.query},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     const { search, department, page = '1', limit = '10' } = req.query;
     const currentPage = Math.max(1, parseInt(String(page),10)||1);
     const limitPerPage = Math.min(Math.max(1,parseInt(String(limit),10)||10),100);
