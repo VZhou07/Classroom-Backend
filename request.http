@@ -5,8 +5,8 @@ Origin: http://localhost:5173
 Content-Type: application/json
 
 {
-    "email": "test@test.com",
+    "email": "john123@test.com",
     "password": "test1234",
-    "name": "John",
-    "role": "admin"
+    "name": "Johnnie123",
+    "role": "teacher"
 }
