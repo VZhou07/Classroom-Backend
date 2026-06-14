@@ -21,16 +21,22 @@ router.post("/", async (req, res) => {
             inviteCode: crypto.randomUUID(),
             schedules:[],
         }
-        const createdClass=res.status(200).json(await db.insert(classes).values(classData).returning());
-        if(createdClass){
-            return res.status(200).json(createdClass);
+        const [createdClass] = await db
+            .insert(classes)
+            .values(classData)
+            .returning();
+
+        if (!createdClass) {
+            return res.status(400).json({ message: "Failed to create class" });
         }
-        else{
-            return res.status(400).json({error:"Failed to create class"});
-        }
+
+        return res.status(200).json({ data: createdClass });
     }
     catch(error){
-        console.error(error)
+        console.error(error);
+        return res.status(500).json({
+            message: error instanceof Error ? error.message : "Failed to create class",
+        });
     }
 
 });
