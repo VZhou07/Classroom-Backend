@@ -4,7 +4,44 @@ import { classes } from "../src/db/schema/app";
 import express from "express";
 import crypto from "crypto";
 
+import { desc, eq, getTableColumns, SQL, sql } from "drizzle-orm";
+import { and, or } from "drizzle-orm";
+import { ilike } from "drizzle-orm";    
+import { subjects } from "../src/db/schema/schema";
+import { user } from "../src/db/schema/auth";
 const router = express.Router();
+
+router.get("/", async (req, res) => {
+    try{
+        const {search, page = '1', limit = '10' } = req.query;
+        const currentPage = Math.max(1, parseInt(String(page),10)||1);
+        const limitPerPage = Math.min(Math.max(1,parseInt(String(limit),10)||10),100);
+        const offset = (currentPage - 1) * limitPerPage;
+        const filterConditions: SQL[] = [];
+        if (search!==undefined){
+            const clause = or(
+                ilike(classes.name, search as string),
+                ilike(subjects.name, search as string),
+                ilike(user.name, search as string),
+            );
+            if (clause) filterConditions.push(clause);
+        }
+        const whereClause= filterConditions.length>0?(
+            and(...filterConditions)):undefined;
+        const countResult= await db.select({count:sql<number>`count(*)::int`}).from(classes).leftJoin(subjects, eq(classes.subjectId, subjects.id)).leftJoin(user, eq(classes.teacherId, user.id)).where(whereClause);
+        const totalCount=countResult[0]?.count??0;
+        const classList= await db.select({...getTableColumns(classes),
+            subject:{...getTableColumns(subjects)},
+            teacher:{...getTableColumns(user)}
+        }).from(classes).leftJoin(subjects, eq(classes.subjectId, subjects.id)).leftJoin(user, eq(classes.teacherId, user.id)).where(whereClause)
+        .orderBy(desc(classes.createdAt)).limit(limitPerPage).offset(offset);
+        return res.status(200).json({ data: classList , pagination:{page:currentPage,limit:limitPerPage,total:totalCount,totalPages:Math.ceil(totalCount/limitPerPage)}});
+    }
+    catch(error){
+        console.error(error);
+        return res.status(500).json({ error:`${error}`});
+    }
+});
 
 router.post("/", async (req, res) => {
     try{
