@@ -3,7 +3,7 @@ import { db } from "../src/db/db";
 import { classes } from "../src/db/schema/app";
 import express from "express";
 import crypto from "crypto";
-
+import { departments } from "../src/db/schema/schema";
 import { desc, eq, getTableColumns, SQL, sql } from "drizzle-orm";
 import { and, or } from "drizzle-orm";
 import { ilike } from "drizzle-orm";    
@@ -77,5 +77,23 @@ router.post("/", async (req, res) => {
     }
 
 });
+
+router.get("/:id",async(req,res)=>{
+    const classId=Number(req.params.id);
+    if(isNaN(classId)){
+        return res.status(400).json({message:"Invalid class ID"});
+    }
+    const classData=await db.select(
+        {...getTableColumns(classes),
+        subject:{...getTableColumns(subjects)},
+        teacher:{...getTableColumns(user)},
+        department:{...getTableColumns(departments)},
+    }).from(classes).leftJoin(subjects, eq(classes.subjectId, subjects.id)).leftJoin(user, eq(classes.teacherId, user.id)).leftJoin(departments, eq(subjects.departmentId, departments.id)).where(eq(classes.id,classId));
+    if(!classData){
+        return res.status(404).json({message:"Class not found"});
+    }
+    return res.status(200).json({data:classData[0]??null});
+
+})
 
 export default router;
