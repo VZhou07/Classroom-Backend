@@ -1,6 +1,6 @@
 import { newClass } from "../src/db/schema/app";
 import { db } from "../src/db/db";
-import { classes } from "../src/db/schema/app";
+import { classes, enrollments } from "../src/db/schema/app";
 import express from "express";
 import crypto from "crypto";
 import { departments } from "../src/db/schema/schema";
@@ -9,6 +9,7 @@ import { and, or } from "drizzle-orm";
 import { ilike } from "drizzle-orm";    
 import { subjects } from "../src/db/schema/schema";
 import { user } from "../src/db/schema/auth";
+import { requireAuth, requireRole } from "../src/middleware/auth";
 const router = express.Router();
 
 router.get("/", async (req, res) => {
@@ -95,5 +96,62 @@ router.get("/:id",async(req,res)=>{
     return res.status(200).json({data:classData[0]??null});
 
 })
+
+router.post("/join", requireAuth, requireRole("student"), async (req, res) => {
+    try {
+        const { inviteCode } = req.body as { inviteCode?: string };
+
+        if (!inviteCode) {
+            return res.status(400).json({ message: "inviteCode is required" });
+        }
+
+        const [classData] = await db
+            .select()
+            .from(classes)
+            .where(eq(classes.inviteCode, inviteCode))
+            .limit(1);
+
+        if (!classData) {
+            return res.status(404).json({ message: "Invalid invite code" });
+        }
+
+        const [countResult] = await db
+            .select({ count: sql<number>`count(*)::int` })
+            .from(enrollments)
+            .where(eq(enrollments.classId, classData.id));
+        const enrolledCount = countResult?.count ?? 0;
+
+        if (enrolledCount >= classData.capacity) {
+            return res.status(409).json({ message: "This class is full" });
+        }
+
+        const [existing] = await db
+            .select()
+            .from(enrollments)
+            .where(
+                and(
+                    eq(enrollments.studentId, req.user!.id),
+                    eq(enrollments.classId, classData.id),
+                ),
+            )
+            .limit(1);
+
+        if (existing) {
+            return res.status(409).json({ message: "You are already enrolled in this class" });
+        }
+
+        const [enrollment] = await db
+            .insert(enrollments)
+            .values({ studentId: req.user!.id, classId: classData.id })
+            .returning();
+
+        return res.status(201).json({ data: { enrollment, class: classData } });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({
+            message: error instanceof Error ? error.message : "Failed to join class",
+        });
+    }
+});
 
 export default router;
