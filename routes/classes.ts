@@ -10,15 +10,28 @@ import { ilike } from "drizzle-orm";
 import { subjects } from "../src/db/schema/schema";
 import { user } from "../src/db/schema/auth";
 import { requireAuth, requireRole } from "../src/middleware/auth";
+
+function isPgUniqueViolation(error: unknown): boolean {
+    return (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        (error as { code: string }).code === "23505"
+    );
+}
+
 const router = express.Router();
 
 router.get("/", async (req, res) => {
     try{
-        const {search, page = '1', limit = '10' } = req.query;
+        const { search, page = '1', limit = '10', teacherId } = req.query;
         const currentPage = Math.max(1, parseInt(String(page),10)||1);
         const limitPerPage = Math.min(Math.max(1,parseInt(String(limit),10)||10),100);
         const offset = (currentPage - 1) * limitPerPage;
         const filterConditions: SQL[] = [];
+        if (teacherId !== undefined && String(teacherId).length > 0) {
+            filterConditions.push(eq(classes.teacherId, String(teacherId)));
+        }
         if (search!==undefined){
             const clause = or(
                 ilike(classes.name, search as string),
@@ -106,7 +119,7 @@ router.post("/join", requireAuth, requireRole("student"), async (req, res) => {
         }
 
         const [classData] = await db
-            .select()
+            .select({ id: classes.id })
             .from(classes)
             .where(eq(classes.inviteCode, inviteCode))
             .limit(1);
@@ -115,38 +128,49 @@ router.post("/join", requireAuth, requireRole("student"), async (req, res) => {
             return res.status(404).json({ message: "Invalid invite code" });
         }
 
-        const [countResult] = await db
-            .select({ count: sql<number>`count(*)::int` })
-            .from(enrollments)
-            .where(eq(enrollments.classId, classData.id));
-        const enrolledCount = countResult?.count ?? 0;
+        const result = await db.transaction(async (tx) => {
+            const [lockedClass] = await tx
+                .select()
+                .from(classes)
+                .where(eq(classes.id, classData.id))
+                .for("update")
+                .limit(1);
 
-        if (enrolledCount >= classData.capacity) {
-            return res.status(409).json({ message: "This class is full" });
+            if (!lockedClass) {
+                return { status: 404 as const, message: "Invalid invite code" };
+            }
+
+            if (lockedClass.status !== "active") {
+                return { status: 409 as const, message: "This class is not active" };
+            }
+
+            const [countResult] = await tx
+                .select({ count: sql<number>`count(*)::int` })
+                .from(enrollments)
+                .where(eq(enrollments.classId, lockedClass.id));
+            const enrolledCount = countResult?.count ?? 0;
+
+            if (enrolledCount >= lockedClass.capacity) {
+                return { status: 409 as const, message: "This class is full" };
+            }
+
+            const [enrollment] = await tx
+                .insert(enrollments)
+                .values({ studentId: req.user!.id, classId: lockedClass.id })
+                .returning();
+
+            return { status: 201 as const, enrollment, class: lockedClass };
+        });
+
+        if (result.status === 201) {
+            return res.status(201).json({ data: { enrollment: result.enrollment, class: result.class } });
         }
 
-        const [existing] = await db
-            .select()
-            .from(enrollments)
-            .where(
-                and(
-                    eq(enrollments.studentId, req.user!.id),
-                    eq(enrollments.classId, classData.id),
-                ),
-            )
-            .limit(1);
-
-        if (existing) {
+        return res.status(result.status).json({ message: result.message });
+    } catch (error) {
+        if (isPgUniqueViolation(error)) {
             return res.status(409).json({ message: "You are already enrolled in this class" });
         }
-
-        const [enrollment] = await db
-            .insert(enrollments)
-            .values({ studentId: req.user!.id, classId: classData.id })
-            .returning();
-
-        return res.status(201).json({ data: { enrollment, class: classData } });
-    } catch (error) {
         console.error(error);
         return res.status(500).json({
             message: error instanceof Error ? error.message : "Failed to join class",
