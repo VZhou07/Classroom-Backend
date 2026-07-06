@@ -1,9 +1,20 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import { db } from "../db/db.js"; // your drizzle instance
 import * as schema from "../db/schema/index.js";
 import { sendPasswordResetEmail } from "./email.js";
+
+const pendingInviteMatch = (email: string) =>
+    and(
+        sql`lower(${schema.invitations.email}) = ${email.toLowerCase()}`,
+        eq(schema.invitations.status, "pending"),
+    );
+
+const pendingInviteOrder = [
+    desc(schema.invitations.createdAt),
+    desc(schema.invitations.id),
+] as const;
 
 export const auth = betterAuth({
     secret:process.env.BETTER_AUTH_SECRET,
@@ -53,12 +64,8 @@ export const auth = betterAuth({
                     const [invite] = await db
                         .select()
                         .from(schema.invitations)
-                        .where(
-                            and(
-                                eq(schema.invitations.email, user.email),
-                                eq(schema.invitations.status, "pending"),
-                            ),
-                        )
+                        .where(pendingInviteMatch(user.email))
+                        .orderBy(...pendingInviteOrder)
                         .limit(1);
 
                     if (!invite || invite.expiresAt < new Date()) {
@@ -73,35 +80,39 @@ export const auth = betterAuth({
                     };
                 },
                 after: async (user) => {
-                    const [invite] = await db
-                        .select()
-                        .from(schema.invitations)
-                        .where(
-                            and(
-                                eq(schema.invitations.email, user.email),
-                                eq(schema.invitations.status, "pending"),
-                            ),
-                        )
-                        .limit(1);
+                    await db.transaction(async (tx) => {
+                        const [invite] = await tx
+                            .select()
+                            .from(schema.invitations)
+                            .where(pendingInviteMatch(user.email))
+                            .orderBy(...pendingInviteOrder)
+                            .for("update")
+                            .limit(1);
 
-                    if (!invite || invite.expiresAt < new Date()) {
-                        return;
-                    }
+                        if (!invite || invite.expiresAt < new Date()) {
+                            return;
+                        }
 
-                    await db
-                        .update(schema.invitations)
-                        .set({ status: "accepted" })
-                        .where(eq(schema.invitations.id, invite.id));
+                        await tx
+                            .update(schema.invitations)
+                            .set({ status: "accepted" })
+                            .where(
+                                and(
+                                    eq(schema.invitations.id, invite.id),
+                                    eq(schema.invitations.status, "pending"),
+                                ),
+                            );
 
-                    if (invite.classId) {
-                        await db
-                            .insert(schema.enrollments)
-                            .values({
-                                studentId: user.id,
-                                classId: invite.classId,
-                            })
-                            .onConflictDoNothing();
-                    }
+                        if (invite.classId) {
+                            await tx
+                                .insert(schema.enrollments)
+                                .values({
+                                    studentId: user.id,
+                                    classId: invite.classId,
+                                })
+                                .onConflictDoNothing();
+                        }
+                    });
                 },
             },
         },

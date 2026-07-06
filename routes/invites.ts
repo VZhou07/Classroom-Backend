@@ -139,8 +139,7 @@ router.post("/", requireAuth, requireRole("admin", "teacher"), async (req, res) 
             return res.status(500).json({ message: "Failed to create invite" });
         }
 
-        const acceptUrl = `${process.env.FRONTEND_URL}/accept-invite?token=${token}`;
-        await sendInviteEmail(email, acceptUrl, role, className);
+        await sendInviteEmail(invite.id, email, token, role, className);
 
         return res.status(201).json({ data: invite });
     } catch (error) {
