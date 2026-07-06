@@ -1,6 +1,6 @@
 import { newClass } from "../src/db/schema/app";
 import { db } from "../src/db/db";
-import { classes } from "../src/db/schema/app";
+import { classes, enrollments } from "../src/db/schema/app";
 import express from "express";
 import crypto from "crypto";
 import { departments } from "../src/db/schema/schema";
@@ -9,15 +9,29 @@ import { and, or } from "drizzle-orm";
 import { ilike } from "drizzle-orm";    
 import { subjects } from "../src/db/schema/schema";
 import { user } from "../src/db/schema/auth";
+import { requireAuth, requireRole } from "../src/middleware/auth";
+
+function isPgUniqueViolation(error: unknown): boolean {
+    return (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        (error as { code: string }).code === "23505"
+    );
+}
+
 const router = express.Router();
 
 router.get("/", async (req, res) => {
     try{
-        const {search, page = '1', limit = '10' } = req.query;
+        const { search, page = '1', limit = '10', teacherId } = req.query;
         const currentPage = Math.max(1, parseInt(String(page),10)||1);
         const limitPerPage = Math.min(Math.max(1,parseInt(String(limit),10)||10),100);
         const offset = (currentPage - 1) * limitPerPage;
         const filterConditions: SQL[] = [];
+        if (teacherId !== undefined && String(teacherId).length > 0) {
+            filterConditions.push(eq(classes.teacherId, String(teacherId)));
+        }
         if (search!==undefined){
             const clause = or(
                 ilike(classes.name, search as string),
@@ -95,5 +109,73 @@ router.get("/:id",async(req,res)=>{
     return res.status(200).json({data:classData[0]??null});
 
 })
+
+router.post("/join", requireAuth, requireRole("student"), async (req, res) => {
+    try {
+        const { inviteCode } = req.body as { inviteCode?: string };
+
+        if (!inviteCode) {
+            return res.status(400).json({ message: "inviteCode is required" });
+        }
+
+        const [classData] = await db
+            .select({ id: classes.id })
+            .from(classes)
+            .where(eq(classes.inviteCode, inviteCode))
+            .limit(1);
+
+        if (!classData) {
+            return res.status(404).json({ message: "Invalid invite code" });
+        }
+
+        const result = await db.transaction(async (tx) => {
+            const [lockedClass] = await tx
+                .select()
+                .from(classes)
+                .where(eq(classes.id, classData.id))
+                .for("update")
+                .limit(1);
+
+            if (!lockedClass) {
+                return { status: 404 as const, message: "Invalid invite code" };
+            }
+
+            if (lockedClass.status !== "active") {
+                return { status: 409 as const, message: "This class is not active" };
+            }
+
+            const [countResult] = await tx
+                .select({ count: sql<number>`count(*)::int` })
+                .from(enrollments)
+                .where(eq(enrollments.classId, lockedClass.id));
+            const enrolledCount = countResult?.count ?? 0;
+
+            if (enrolledCount >= lockedClass.capacity) {
+                return { status: 409 as const, message: "This class is full" };
+            }
+
+            const [enrollment] = await tx
+                .insert(enrollments)
+                .values({ studentId: req.user!.id, classId: lockedClass.id })
+                .returning();
+
+            return { status: 201 as const, enrollment, class: lockedClass };
+        });
+
+        if (result.status === 201) {
+            return res.status(201).json({ data: { enrollment: result.enrollment, class: result.class } });
+        }
+
+        return res.status(result.status).json({ message: result.message });
+    } catch (error) {
+        if (isPgUniqueViolation(error)) {
+            return res.status(409).json({ message: "You are already enrolled in this class" });
+        }
+        console.error(error);
+        return res.status(500).json({
+            message: error instanceof Error ? error.message : "Failed to join class",
+        });
+    }
+});
 
 export default router;

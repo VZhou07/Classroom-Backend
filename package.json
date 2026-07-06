@@ -10,6 +10,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:demo": "tsx src/crud-demo.ts",
+    "seed:admin": "tsx scripts/seed-admin.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -25,6 +26,7 @@
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
     "express": "^5.2.1",
+    "resend": "^6.17.1",
     "ws": "^8.20.0"
   },
   "devDependencies": {

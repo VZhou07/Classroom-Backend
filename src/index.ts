@@ -2,10 +2,12 @@ import express from 'express';
 import subjectsRoutes from '../routes/subjects.js';
 import cors from 'cors';
 import {securityMiddleware} from './middleware/security.js';
+import { attachUser } from './middleware/auth.js';
 import { toNodeHandler } from "better-auth/node";
 import { auth } from './lib/auth.js';
 import usersRoutes from '../routes/users.js';
 import classesRoutes from '../routes/classes.js';
+import invitesRoutes from '../routes/invites.js';
 
 
 const app = express();
@@ -21,10 +23,12 @@ app.use(cors({
 app.all("/api/auth/*splat",toNodeHandler(auth));
 
 app.use(express.json());
+app.use(attachUser);
 app.use(securityMiddleware);
 app.use("/api/subjects",subjectsRoutes);
 app.use("/api/users",usersRoutes);
 app.use("/api/classes",classesRoutes);
+app.use("/api/invites",invitesRoutes);
 //routes
 
 app.get('/', (req, res) => {
