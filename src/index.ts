@@ -8,6 +8,8 @@ import { auth } from './lib/auth.js';
 import usersRoutes from '../routes/users.js';
 import classesRoutes from '../routes/classes.js';
 import invitesRoutes from '../routes/invites.js';
+import dashboardRoutes from '../routes/dashboard.js';
+import gradesRoutes from '../routes/grades.js';
 
 
 const app = express();
@@ -29,6 +31,8 @@ app.use("/api/subjects",subjectsRoutes);
 app.use("/api/users",usersRoutes);
 app.use("/api/classes",classesRoutes);
 app.use("/api/invites",invitesRoutes);
+app.use("/api/dashboard", dashboardRoutes);
+app.use("/api", gradesRoutes);
 //routes
 
 app.get('/', (req, res) => {

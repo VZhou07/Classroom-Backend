@@ -43,6 +43,13 @@
       "when": 1783200406378,
       "tag": "0005_motionless_preak",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1783888898863,
+      "tag": "0006_giant_the_watchers",
+      "breakpoints": true
     }
   ]
 }
