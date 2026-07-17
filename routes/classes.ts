@@ -72,11 +72,14 @@ router.get("/", requireAuth, async (req, res) => {
             filterConditions.push(eq(enrollments.studentId, studentId));
         }
 
-        if (search !== undefined) {
+        const searchTerm =
+            typeof search === "string" ? search.trim() : undefined;
+        if (searchTerm) {
+            const pattern = `%${searchTerm}%`;
             const clause = or(
-                ilike(classes.name, search as string),
-                ilike(subjects.name, search as string),
-                ilike(user.name, search as string),
+                ilike(classes.name, pattern),
+                ilike(subjects.name, pattern),
+                ilike(user.name, pattern),
             );
             if (clause) filterConditions.push(clause);
         }
@@ -144,7 +147,9 @@ router.get("/", requireAuth, async (req, res) => {
         });
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: `${error}` });
+        return res.status(500).json({
+            message: "Failed to fetch classes",
+        });
     }
 });
 
@@ -312,7 +317,7 @@ router.get("/:id/enrollments", requireAuth, async (req, res) => {
     }
 });
 
-router.get("/:id", async (req, res) => {
+router.get("/:id", requireAuth, async (req, res) => {
     const classId = Number(req.params.id);
     if (isNaN(classId)) {
         return res.status(400).json({ message: "Invalid class ID" });
@@ -321,7 +326,11 @@ router.get("/:id", async (req, res) => {
         .select({
             ...getTableColumns(classes),
             subject: { ...getTableColumns(subjects) },
-            teacher: { ...getTableColumns(user) },
+            teacher: {
+                id: user.id,
+                name: user.name,
+                image: user.image,
+            },
             department: { ...getTableColumns(departments) },
         })
         .from(classes)

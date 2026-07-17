@@ -190,8 +190,7 @@ router.get("/summary", requireAuth, async (req, res) => {
   } catch (error) {
     console.error(error);
     return res.status(500).json({
-      message:
-        error instanceof Error ? error.message : "Failed to fetch dashboard summary",
+      message: "Failed to fetch dashboard summary",
     });
   }
 });
