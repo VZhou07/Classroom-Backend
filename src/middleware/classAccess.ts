@@ -61,13 +61,21 @@ export async function assertClassAccess(
   return { error: { status: 403, message: "Forbidden" } };
 }
 
+const PG_INT_MIN = -2_147_483_648;
+const PG_INT_MAX = 2_147_483_647;
+
 export function requireValidClassId(
   req: Request,
   res: Response,
   next: NextFunction,
 ) {
   const classId = Number(req.params.classId);
-  if (isNaN(classId)) {
+  if (
+    !Number.isFinite(classId) ||
+    !Number.isInteger(classId) ||
+    classId < PG_INT_MIN ||
+    classId > PG_INT_MAX
+  ) {
     return res.status(400).json({ message: "Invalid class ID" });
   }
   req.classId = classId;

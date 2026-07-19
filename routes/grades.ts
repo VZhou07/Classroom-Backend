@@ -1,8 +1,8 @@
 import express from "express";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../src/db/db.js";
 import { user } from "../src/db/schema/auth.js";
-import { gradeItems, studentGrades } from "../src/db/schema/app.js";
+import { enrollments, gradeItems, studentGrades } from "../src/db/schema/app.js";
 import { requireAuth } from "../src/middleware/auth.js";
 import {
   assertClassAccess,
@@ -211,7 +211,15 @@ router.get(
         .where(eq(gradeItems.classId, classId))
         .orderBy(gradeItems.createdAt);
 
-      const allGrades = await db
+      const gradeConditions = [eq(gradeItems.classId, classId)];
+      if (!isTeacherView) {
+        gradeConditions.push(eq(studentGrades.studentId, sessionUser.id));
+        gradeConditions.push(eq(studentGrades.published, true));
+      } else if (studentIdQuery) {
+        gradeConditions.push(eq(studentGrades.studentId, studentIdQuery));
+      }
+
+      const grades = await db
         .select({
           id: studentGrades.id,
           gradeItemId: studentGrades.gradeItemId,
@@ -224,17 +232,7 @@ router.get(
         .from(studentGrades)
         .innerJoin(user, eq(studentGrades.studentId, user.id))
         .innerJoin(gradeItems, eq(studentGrades.gradeItemId, gradeItems.id))
-        .where(eq(gradeItems.classId, classId));
-
-      let grades = isTeacherView
-        ? allGrades
-        : allGrades.filter(
-            (g) => g.studentId === sessionUser.id && g.published,
-          );
-
-      if (studentIdQuery) {
-        grades = grades.filter((g) => g.studentId === studentIdQuery);
-      }
+        .where(and(...gradeConditions));
 
       const overallForEntries = (
         entries: typeof grades,
@@ -278,8 +276,7 @@ router.get(
     } catch (error) {
       console.error(error);
       return res.status(500).json({
-        message:
-          error instanceof Error ? error.message : "Failed to fetch grades",
+        message: "Failed to fetch grades",
       });
     }
   },
@@ -307,17 +304,22 @@ router.put(
         return res.status(400).json({ message: "grades array is required" });
       }
 
-      const classItemIds = await db
-        .select({ id: gradeItems.id })
-        .from(gradeItems)
-        .where(eq(gradeItems.classId, classId));
-
-      const validItemIds = new Set(classItemIds.map((i) => i.id));
-
       for (const update of gradeUpdates) {
-        if (!validItemIds.has(update.gradeItemId)) {
+        if (
+          update === null ||
+          typeof update !== "object" ||
+          typeof update.gradeItemId !== "number" ||
+          !Number.isFinite(update.gradeItemId) ||
+          !Number.isInteger(update.gradeItemId) ||
+          typeof update.studentId !== "string" ||
+          update.studentId.length === 0 ||
+          typeof update.score !== "number" ||
+          !Number.isFinite(update.score) ||
+          typeof update.published !== "boolean"
+        ) {
           return res.status(400).json({
-            message: `Grade item ${update.gradeItemId} does not belong to this class`,
+            message:
+              "each grade update requires gradeItemId, studentId, score, and published",
           });
         }
 
@@ -326,37 +328,83 @@ router.put(
             .status(400)
             .json({ message: "score must be between 0 and 100" });
         }
+      }
 
-        const enrolled = await isEnrolled(update.studentId, classId);
-        if (!enrolled) {
+      // Last write wins for duplicate (gradeItemId, studentId) pairs.
+      const deduped = new Map<
+        string,
+        {
+          gradeItemId: number;
+          studentId: string;
+          score: number;
+          published: boolean;
+        }
+      >();
+      //safety
+      for (const update of gradeUpdates) {
+        deduped.set(`${update.gradeItemId}:${update.studentId}`, update);
+      }
+      const uniqueUpdates = [...deduped.values()];
+
+      const studentIds = [...new Set(uniqueUpdates.map((u) => u.studentId))];
+
+      const [classItemIds, enrolledRows] = await Promise.all([
+        db
+          .select({ id: gradeItems.id })
+          .from(gradeItems)
+          .where(eq(gradeItems.classId, classId)),
+        db
+          .select({ studentId: enrollments.studentId })
+          .from(enrollments)
+          .where(
+            and(
+              eq(enrollments.classId, classId),
+              inArray(enrollments.studentId, studentIds),
+            ),
+          ),
+      ]);
+
+      const validItemIds = new Set(classItemIds.map((i) => i.id));
+      const enrolledIds = new Set(enrolledRows.map((r) => r.studentId));
+
+      for (const update of uniqueUpdates) {
+        if (!validItemIds.has(update.gradeItemId)) {
+          return res.status(400).json({
+            message: `Grade item ${update.gradeItemId} does not belong to this class`,
+          });
+        }
+        if (!enrolledIds.has(update.studentId)) {
           return res.status(400).json({
             message: `Student ${update.studentId} is not enrolled in this class`,
           });
         }
+      }
 
-        await db
+      const rows = uniqueUpdates.map((update) => ({
+        gradeItemId: update.gradeItemId,
+        studentId: update.studentId,
+        score: String(update.score),
+        published: update.published,
+      }));
+
+      await db.transaction(async (tx) => {
+        await tx
           .insert(studentGrades)
-          .values({
-            gradeItemId: update.gradeItemId,
-            studentId: update.studentId,
-            score: String(update.score),
-            published: update.published,
-          })
+          .values(rows)
           .onConflictDoUpdate({
             target: [studentGrades.gradeItemId, studentGrades.studentId],
             set: {
-              score: String(update.score),
-              published: update.published,
+              score: sql`excluded.score`,
+              published: sql`excluded.published`,
             },
           });
-      }
+      });
 
-      return res.status(200).json({ data: { updated: gradeUpdates.length } });
+      return res.status(200).json({ data: { updated: uniqueUpdates.length } });
     } catch (error) {
       console.error(error);
       return res.status(500).json({
-        message:
-          error instanceof Error ? error.message : "Failed to update grades",
+        message: "Failed to update grades",
       });
     }
   },
