@@ -14,16 +14,16 @@ export const securityMiddleware = async(req:Request,res:Response,next:NextFuncti
     switch(role){
         case "admin":
             limit=100;
-            message="Admin request limit exceeded, 20 per minute";
+            message="Admin request limit exceeded, 100 per minute";
             break;
         case "teacher":
         case "student":
             limit=50;
-            message="User request limit exceeded, 10 per minute";
+            message="User request limit exceeded, 50 per minute";
             break;
         default:
             limit=40;
-            message="Guest request limit exceeded, 5 per minute";
+            message="Guest request limit exceeded, 40 per minute";
             break;
     }
     const client=aj.withRule(

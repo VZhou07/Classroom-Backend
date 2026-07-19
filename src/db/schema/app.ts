@@ -1,4 +1,4 @@
-import { index, integer, jsonb, pgEnum, pgTable, text, timestamp, unique } from 'drizzle-orm/pg-core';
+import { boolean, index, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, unique } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 import { user } from './auth.js';
 import { subjects } from './schema.js';
@@ -148,3 +148,67 @@ export const invitationRelations = relations(invitations, ({ one }) => ({
 
 export type Invitation = typeof invitations.$inferSelect;
 export type newInvitation = typeof invitations.$inferInsert;
+
+export const gradeItems = pgTable(
+  'grade_items',
+  {
+    id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+    classId: integer('class_id')
+      .notNull()
+      .references(() => classes.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    weight: integer('weight').notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    index('grade_items_class_id_idx').on(table.classId),
+  ],
+);
+
+export const studentGrades = pgTable(
+  'student_grades',
+  {
+    id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+    gradeItemId: integer('grade_item_id')
+      .notNull()
+      .references(() => gradeItems.id, { onDelete: 'cascade' }),
+    studentId: text('student_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    score: numeric('score', { precision: 5, scale: 2 }).notNull(),
+    published: boolean('published').notNull().default(false),
+    ...timestamps,
+  },
+  (table) => [
+    unique('student_grades_grade_item_id_student_id_uidx').on(
+      table.gradeItemId,
+      table.studentId,
+    ),
+    index('student_grades_grade_item_id_idx').on(table.gradeItemId),
+    index('student_grades_student_id_idx').on(table.studentId),
+  ],
+);
+
+export const gradeItemRelations = relations(gradeItems, ({ one, many }) => ({
+  class: one(classes, {
+    fields: [gradeItems.classId],
+    references: [classes.id],
+  }),
+  studentGrades: many(studentGrades),
+}));
+
+export const studentGradeRelations = relations(studentGrades, ({ one }) => ({
+  gradeItem: one(gradeItems, {
+    fields: [studentGrades.gradeItemId],
+    references: [gradeItems.id],
+  }),
+  student: one(user, {
+    fields: [studentGrades.studentId],
+    references: [user.id],
+  }),
+}));
+
+export type GradeItem = typeof gradeItems.$inferSelect;
+export type NewGradeItem = typeof gradeItems.$inferInsert;
+export type StudentGrade = typeof studentGrades.$inferSelect;
+export type NewStudentGrade = typeof studentGrades.$inferInsert;
