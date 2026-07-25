@@ -18,6 +18,7 @@ const pendingInviteOrder = [
 
 export const auth = betterAuth({
     secret:process.env.BETTER_AUTH_SECRET,
+    baseURL: process.env.BETTER_AUTH_URL,
     trustedOrigins:[process.env.FRONTEND_URL!],
     database: drizzleAdapter(db, {
         provider: "pg", // or "mysql", "sqlite"
@@ -37,6 +38,14 @@ export const auth = betterAuth({
         github:{
             clientId: process.env.GITHUB_CLIENT_ID!,
             clientSecret: process.env.GITHUB_CLIENT_SECRET!,
+        },
+    },
+    // Allow Google/GitHub to link to an existing email/password user with the same email.
+    // Without this, OAuth returns account_not_linked when that email already exists.
+    account: {
+        accountLinking: {
+            enabled: true,
+            trustedProviders: ["google", "github"],
         },
     },
     user:{
