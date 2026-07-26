@@ -1,15 +1,15 @@
 import { newClass } from "../src/db/schema/app";
-import { db } from "../src/db/db";
+import { db } from "../src/db/db.js";
 import { classes, enrollments } from "../src/db/schema/app";
 import express from "express";
 import crypto from "crypto";
-import { departments } from "../src/db/schema/schema";
+import { departments } from "../src/db/schema/schema.js";
 import { desc, eq, getTableColumns, SQL, sql } from "drizzle-orm";
 import { and, or } from "drizzle-orm";
 import { ilike } from "drizzle-orm";
-import { subjects } from "../src/db/schema/schema";
-import { user } from "../src/db/schema/auth";
-import { requireAuth, requireRole } from "../src/middleware/auth";
+import { subjects } from "../src/db/schema/schema.js";
+import { user } from "../src/db/schema/auth.js";
+import { requireAuth, requireRole } from "../src/middleware/auth.js";
 
 function isPgUniqueViolation(error: unknown): boolean {
     return (

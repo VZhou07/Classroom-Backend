@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from "express";
-import aj from "../config/arcjet";
+import aj from "../config/arcjet.js";
 import { slidingWindow } from "@arcjet/node";
 import { ArcjetNodeRequest } from "@arcjet/node";
 
