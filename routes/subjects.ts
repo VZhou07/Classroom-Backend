@@ -120,7 +120,7 @@ router.post('/', requireAuth, requireRole('admin'), async (req, res) => {
       .limit(1);
 
     if (!matchedDepartment) {
-      return res.status(400).json({ message: 'Department not found' });
+      return res.status(404).json({ message: 'Department not found' });
     }
 
     const subjectData: newSubject = {
