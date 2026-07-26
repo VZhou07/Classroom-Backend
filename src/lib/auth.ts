@@ -16,10 +16,21 @@ const pendingInviteOrder = [
     desc(schema.invitations.id),
 ] as const;
 
+const isProd = process.env.NODE_ENV === "production";
+
 export const auth = betterAuth({
     secret:process.env.BETTER_AUTH_SECRET,
     baseURL: process.env.BETTER_AUTH_URL,
     trustedOrigins:[process.env.FRONTEND_URL!],
+    // In production the frontend and backend live on different domains, so the
+    // session cookie must be cross-site capable (SameSite=None requires Secure/HTTPS).
+    // Locally we keep SameSite=Lax over http://localhost so dev still works.
+    advanced: {
+        defaultCookieAttributes: {
+            sameSite: isProd ? "none" : "lax",
+            secure: isProd,
+        },
+    },
     database: drizzleAdapter(db, {
         provider: "pg", // or "mysql", "sqlite"
         schema

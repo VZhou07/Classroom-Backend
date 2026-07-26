@@ -13,7 +13,9 @@ import gradesRoutes from '../routes/grades.js';
 
 
 const app = express();
-const PORT = 8000;
+// Hosts like Render inject the port via process.env.PORT and route traffic to it.
+// Fall back to 8000 for local development.
+const PORT = Number(process.env.PORT) || 8000;
 
 //middleware
 app.use(cors({
