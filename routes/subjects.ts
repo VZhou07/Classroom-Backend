@@ -1,8 +1,9 @@
 import express from 'express';
 import { type SQL, and, eq, getTableColumns, ilike, or, sql } from 'drizzle-orm';
-import { departments, subjects } from '../src/db/schema/schema.js';
+import { departments, subjects, type newSubject } from '../src/db/schema/schema.js';
 import { db } from '../src/db/db.js';
 import { desc } from 'drizzle-orm';
+import { requireAuth, requireRole } from '../src/middleware/auth.js';
 
 /** First non-empty string from Express query (avoids arrays/objects in ILIKE patterns). */
 function queryString(param: unknown): string | undefined {
@@ -82,6 +83,69 @@ router.get('/', async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 
+});
+
+router.post('/', requireAuth, requireRole('admin'), async (req, res) => {
+  try {
+    const { name, code, description, departmentId } = req.body as {
+      name?: string;
+      code?: string;
+      description?: string;
+      departmentId?: number | string;
+    };
+
+    const parsedDepartmentId =
+      typeof departmentId === 'number'
+        ? departmentId
+        : typeof departmentId === 'string'
+          ? Number(departmentId)
+          : NaN;
+
+    if (
+      !name ||
+      !code ||
+      !description ||
+      !Number.isInteger(parsedDepartmentId) ||
+      parsedDepartmentId < 1
+    ) {
+      return res.status(400).json({
+        message: 'name, code, description, and departmentId are required',
+      });
+    }
+
+    const [matchedDepartment] = await db
+      .select({ id: departments.id })
+      .from(departments)
+      .where(eq(departments.id, parsedDepartmentId))
+      .limit(1);
+
+    if (!matchedDepartment) {
+      return res.status(404).json({ message: 'Department not found' });
+    }
+
+    const subjectData: newSubject = {
+      name,
+      code,
+      description,
+      departmentId: matchedDepartment.id,
+    };
+
+    const [createdSubject] = await db
+      .insert(subjects)
+      .values(subjectData)
+      .returning();
+
+    if (!createdSubject) {
+      return res.status(400).json({ message: 'Failed to create subject' });
+    }
+
+    return res.status(200).json({ data: createdSubject });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      message: 'Failed to create subject',
+    });
+  }
 });
 
 export default router;

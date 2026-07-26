@@ -1,5 +1,6 @@
 import express from 'express';
 import subjectsRoutes from '../routes/subjects.js';
+import departmentsRoutes from '../routes/departments.js';
 import cors from 'cors';
 import {securityMiddleware} from './middleware/security.js';
 import { attachUser } from './middleware/auth.js';
@@ -13,7 +14,8 @@ import gradesRoutes from '../routes/grades.js';
 
 
 const app = express();
-const PORT = 8000;
+const PORT_RAW = process.env.PORT;
+const PORT = PORT_RAW && Number.isFinite(Number(PORT_RAW)) ? Number(PORT_RAW) : 8000;
 
 //middleware
 app.use(cors({
@@ -28,6 +30,7 @@ app.use(express.json());
 app.use(attachUser);
 app.use(securityMiddleware);
 app.use("/api/subjects",subjectsRoutes);
+app.use("/api/departments",departmentsRoutes);
 app.use("/api/users",usersRoutes);
 app.use("/api/classes",classesRoutes);
 app.use("/api/invites",invitesRoutes);

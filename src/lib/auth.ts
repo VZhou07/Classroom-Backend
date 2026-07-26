@@ -16,6 +16,13 @@ const pendingInviteOrder = [
     desc(schema.invitations.id),
 ] as const;
 
+// Cross-origin FE/BE (e.g. pages.dev + onrender.com) needs SameSite=None; Secure
+// so the browser sends the session cookie on credentialed API calls. Local HTTP
+// keeps Lax (Secure cookies require HTTPS).
+const isProd =
+    process.env.NODE_ENV === "production" ||
+    (process.env.BETTER_AUTH_URL?.startsWith("https://") ?? false);
+
 export const auth = betterAuth({
     secret:process.env.BETTER_AUTH_SECRET,
     baseURL: process.env.BETTER_AUTH_URL,
@@ -24,6 +31,13 @@ export const auth = betterAuth({
         provider: "pg", // or "mysql", "sqlite"
         schema
     }),
+    advanced: {
+        defaultCookieAttributes: {
+            sameSite: isProd ? "none" : "lax",
+            secure: isProd,
+            httpOnly: true,
+        },
+    },
     emailAndPassword:{
         enabled:true,
         sendResetPassword: async ({ user, url }) => {
