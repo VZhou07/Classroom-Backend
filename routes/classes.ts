@@ -1,6 +1,9 @@
-import { newClass } from "../src/db/schema/app";
 import { db } from "../src/db/db.js";
-import { classes, enrollments } from "../src/db/schema/app";
+import {
+  classes,
+  enrollments,
+  type newClass,
+} from "../src/db/schema/app.js";
 import express from "express";
 import crypto from "crypto";
 import { departments } from "../src/db/schema/schema.js";
