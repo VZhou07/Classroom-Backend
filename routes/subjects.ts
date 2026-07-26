@@ -87,23 +87,36 @@ router.get('/', async (req, res) => {
 
 router.post('/', requireAuth, requireRole('admin'), async (req, res) => {
   try {
-    const { name, code, description, department } = req.body as {
+    const { name, code, description, departmentId } = req.body as {
       name?: string;
       code?: string;
       description?: string;
-      department?: string;
+      departmentId?: number | string;
     };
 
-    if (!name || !code || !description || !department) {
+    const parsedDepartmentId =
+      typeof departmentId === 'number'
+        ? departmentId
+        : typeof departmentId === 'string'
+          ? Number(departmentId)
+          : NaN;
+
+    if (
+      !name ||
+      !code ||
+      !description ||
+      !Number.isInteger(parsedDepartmentId) ||
+      parsedDepartmentId < 1
+    ) {
       return res.status(400).json({
-        message: 'name, code, description, and department are required',
+        message: 'name, code, description, and departmentId are required',
       });
     }
 
     const [matchedDepartment] = await db
       .select({ id: departments.id })
       .from(departments)
-      .where(eq(departments.name, department))
+      .where(eq(departments.id, parsedDepartmentId))
       .limit(1);
 
     if (!matchedDepartment) {
@@ -130,8 +143,7 @@ router.post('/', requireAuth, requireRole('admin'), async (req, res) => {
   } catch (error) {
     console.error(error);
     return res.status(500).json({
-      message:
-        error instanceof Error ? error.message : 'Failed to create subject',
+      message: 'Failed to create subject',
     });
   }
 });
