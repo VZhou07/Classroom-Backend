@@ -37,7 +37,7 @@ export const securityMiddleware = async(req:Request,res:Response,next:NextFuncti
         headers:req.headers,
         method:req.method,
         url:req.originalUrl??req.url,
-        socket:{remoteAddress:req.socket.remoteAddress??req.ip??"0.0.0.0"},
+        socket:{remoteAddress:req.ip ?? req.socket.remoteAddress ?? "0.0.0.0"},
     }
     const decision = await client.protect(arcjetRequest);
     if (decision.isDenied()  && decision.reason.isBot()) {

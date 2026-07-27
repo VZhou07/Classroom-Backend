@@ -14,6 +14,8 @@ import gradesRoutes from '../routes/grades.js';
 
 
 const app = express();
+// Render sits behind a proxy; trust X-Forwarded-For so req.ip is the real client IP.
+app.set("trust proxy", true);
 const PORT_RAW = process.env.PORT;
 const PORT = PORT_RAW && Number.isFinite(Number(PORT_RAW)) ? Number(PORT_RAW) : 8000;
 
