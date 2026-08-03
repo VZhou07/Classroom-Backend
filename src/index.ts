@@ -11,6 +11,20 @@ import classesRoutes from '../routes/classes.js';
 import invitesRoutes from '../routes/invites.js';
 import dashboardRoutes from '../routes/dashboard.js';
 import gradesRoutes from '../routes/grades.js';
+import { deleteExpiredSessions } from './lib/session-cleanup.js';
+
+const SESSION_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+async function runSessionCleanup() {
+    try {
+        const count = await deleteExpiredSessions();
+        if (count > 0) {
+            console.log(`Deleted ${count} expired session(s)`);
+        }
+    } catch (error) {
+        console.error("Failed to delete expired sessions:", error);
+    }
+}
 
 
 const app = express();
@@ -46,5 +60,7 @@ app.get('/', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Server listening at http://localhost:${PORT}/`);
+  void runSessionCleanup();
+  setInterval(runSessionCleanup, SESSION_CLEANUP_INTERVAL_MS);
 });
 

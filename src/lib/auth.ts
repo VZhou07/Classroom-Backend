@@ -16,16 +16,18 @@ const pendingInviteOrder = [
     desc(schema.invitations.id),
 ] as const;
 
-// Cross-origin FE/BE (e.g. pages.dev + onrender.com) needs SameSite=None; Secure
-// so the browser sends the session cookie on credentialed API calls. Local HTTP
-// keeps Lax (Secure cookies require HTTPS).
+// Session cookies are first-party when the frontend proxies /api (see vercel.json).
+// SameSite=Lax works on mobile Safari; cross-site SameSite=None is often blocked.
 const isProd =
     process.env.NODE_ENV === "production" ||
     (process.env.BETTER_AUTH_URL?.startsWith("https://") ?? false);
 
+// Public URL where browsers reach /api/auth (frontend origin when proxied).
+const authBaseURL = process.env.BETTER_AUTH_URL ?? process.env.FRONTEND_URL!;
+
 export const auth = betterAuth({
     secret:process.env.BETTER_AUTH_SECRET,
-    baseURL: process.env.BETTER_AUTH_URL,
+    baseURL: authBaseURL,
     trustedOrigins:[process.env.FRONTEND_URL!],
     database: drizzleAdapter(db, {
         provider: "pg", // or "mysql", "sqlite"
@@ -36,7 +38,7 @@ export const auth = betterAuth({
             ipAddressHeaders: ["x-forwarded-for"],
         },
         defaultCookieAttributes: {
-            sameSite: isProd ? "none" : "lax",
+            sameSite: "lax",
             secure: isProd,
             httpOnly: true,
         },
